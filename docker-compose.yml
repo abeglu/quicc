@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  ocserv:
+    build: ./ocserv
+    image: quicc-oc
+    container_name: quicc-ocserv
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges
+    restart: always
+    ports:
+      - 0.0.0.0:443:443 
+#    expose:
+#      - 443 
+    environment:
+      - DOMAIN=${DOMAIN}
+      - CA_CN=${CA_COMMON_NAME}
+      - CA_ORG=${CA_ORGANIZATION}
+      - CA_DAYS=${CA_EXPIRATION_DAYS}
+    volumes:
+      - ./ocserv/certs:/etc/ocserv/certs
+      - ocserv-data:/etc
+      - letsencrypt-cert:/etc/letsencrypt
+    depends_on: 
+      - certbot
+    networks:
+      net-1:
+        aliases:
+          - vpn
+#      ext-1:
+
+  certbot:
+    image: certbot/certbot
+    container_name: quicc-certbot
+    command: "certonly --standalone -n --agree-tos -m ${ADMIN_EMAIL} --preferred-challenges http -d ${DOMAIN} -d oc.${DOMAIN} -d ss.${DOMAIN}"
+    restart: "no"
+    ports:
+      - 0.0.0.0:80:80
+    volumes:
+      - letsencrypt-cert:/etc/letsencrypt
+    networks:
+      net-1:
+
+  shadowsocks:
+    image: shadowsocks/shadowsocks-libev:latest
+    container_name: quicc-shadowsocks
+    command: 'ss-server -s 0.0.0.0 -p 443 -k ${SS_PASSWORD} -m ${SS_METHOD} -t 30 -d 8.8.8.8,1.1.1.1 --fast-open --no-delay'
+    restart: always
+    ports:
+      - 0.0.0.0:8443:443 
+    networks:
+      net-1:
+        aliases:
+          - proxy
+
+
+networks:
+  net-1:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-quicc
+#    enable_ipv6: false
+
+#  ext-1:
+#    external:
+#      name: ext-1
+
+volumes:
+  ocserv-data:
+  letsencrypt-cert:
+
